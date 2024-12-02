@@ -1,26 +1,62 @@
 from django.contrib import admin
+from django.http import HttpResponse
+import csv
+import datetime
 from .models import Order, OrderItem
+from django.urls import reverse
+from django.utils.safestring import mark_safe
 
-# Inline para mostrar los ítems de la orden dentro de la vista de la orden
+# Inline to show order items within the order view
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
-    raw_id_fields = ['product']  # Para hacer que el campo 'product' use un campo de búsqueda en vez de un desplegable
+    raw_id_fields = ['product']  # Use a search field for 'product' instead of a dropdown
 
-# Personalización de la vista de la administración para la orden
-@admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
-    # Campos que se mostrarán en la lista de órdenes
-    list_display = [
-        'id', 'first_name', 'last_name', 'phone_number', 'payment_method', 'paid', 'created', 'updated'
+# Export to CSV function
+def export_to_csv(modeladmin, request, queryset):
+    opts = modeladmin.model._meta
+    content_disposition = f'attachment; filename={opts.verbose_name}.csv'
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = content_disposition
+    writer = csv.writer(response)
+
+    fields = [
+        field for field in opts.get_fields() 
+        if not field.many_to_many and not field.one_to_many
     ]
     
-    # Filtros para las órdenes
+    # Write a first row with header information
+    writer.writerow([field.verbose_name for field in fields])
+    
+    # Write data rows for each object in the queryset
+    for obj in queryset:
+        data_row = []
+        for field in fields:
+            value = getattr(obj, field.name)
+            if isinstance(value, datetime.datetime):
+                value = value.strftime('%d/%m/%Y')  # Format datetime fields
+            data_row.append(value)
+        writer.writerow(data_row)
+    
+    return response
+
+export_to_csv.short_description = 'Export to CSV'
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    # Fields to display in the list of orders
+    list_display = [
+        'id', 'first_name', 'last_name', 'phone_number', 'payment_method', 'paid', 'created', 'updated',
+    ]
+    
+    # Filters for orders
     list_filter = ['paid', 'created', 'updated']
     
-    # Inline para los ítems de la orden (para mostrar los productos de cada orden)
+    # Inline for showing order items
     inlines = [OrderItemInline]
     
-    # Campos para la búsqueda rápida en la administración
+    # Fields to search in the admin
     search_fields = ['first_name', 'last_name', 'phone_number']
-
-# Para el modelo OrderItem, ya que el inline lo gestiona, no es necesario un administrador separado.
+    
+    # Adding the CSV export action
+    actions = [export_to_csv]
