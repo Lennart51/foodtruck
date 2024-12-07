@@ -42,5 +42,3 @@ def order_create(request):
     
     # Renderizar la plantilla para crear una nueva orden
     return render(request, 'orders/order/create.html', {'cart': cart, 'form': form})
-
-
